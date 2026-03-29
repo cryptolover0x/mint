@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAO-20 · Deploy</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- Load polkadot/api bundle immediately on page load -->
+<script src="https://cdn.jsdelivr.net/npm/@polkadot/api@10.11.3/bundle-polkadot-api.js"></script>
+
+<style>
+  :root {
+    --bg:#0a0a0a;--surface:#111;--border:#2a2a2a;--border2:#333;
+    --accent:#b3ff00;--text:#f0f0f0;--muted:#666;--muted2:#444;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(179,255,0,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(179,255,0,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+  .page{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:2rem 1.5rem 4rem;}
+
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:3rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border);}
+  .logo{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:.1em;}
+  .logo span{color:var(--muted);}
+
+  /* API status bar */
+  #apiBar{font-family:var(--mono);font-size:11px;padding:6px 12px;margin-bottom:2rem;display:flex;align-items:center;gap:8px;border:1px solid;}
+  #apiBar.loading{background:rgba(100,150,255,.05);border-color:rgba(100,150,255,.2);color:#8aaeff;}
+  #apiBar.ready{background:rgba(179,255,0,.05);border-color:rgba(179,255,0,.2);color:var(--accent);}
+  #apiBar.fail{background:rgba(255,60,60,.05);border-color:rgba(255,60,60,.3);color:#ff6b6b;}
+  .bar-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.5s infinite;flex-shrink:0;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .wallet-btn{font-family:var(--mono);font-size:11px;letter-spacing:.08em;background:transparent;border:1px solid var(--border2);color:var(--muted);padding:8px 16px;cursor:pointer;text-transform:uppercase;transition:all .2s;}
+  .wallet-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .wallet-btn.connected{border-color:var(--accent);color:var(--accent);background:rgba(179,255,0,.05);}
+
+  .hero{margin-bottom:3rem;}
+  .hero h1{font-family:var(--mono);font-size:clamp(26px,5vw,42px);font-weight:700;line-height:1.1;margin-bottom:.75rem;}
+  .hero h1 em{color:var(--accent);font-style:normal;}
+  .hero p{font-size:15px;color:var(--muted);line-height:1.7;}
+  .fee-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(179,255,0,.07);border:1px solid rgba(179,255,0,.2);padding:6px 14px;margin-top:1.25rem;font-family:var(--mono);font-size:11px;color:var(--accent);}
+  .dot{width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite;flex-shrink:0;}
+
+  .card{background:var(--surface);border:1px solid var(--border);padding:2rem;margin-bottom:1.5rem;}
+  .card-title{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:1.75rem;display:flex;align-items:center;gap:10px;}
+  .card-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+  .field{margin-bottom:1.5rem;}
+  .field label{display:block;font-size:12px;font-family:var(--mono);color:var(--muted);margin-bottom:.5rem;letter-spacing:.06em;text-transform:uppercase;}
+  .field input{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:15px;padding:12px 16px;outline:none;transition:border-color .2s;}
+  .field input:focus{border-color:var(--accent);}
+  .field input::placeholder{color:var(--muted2);}
+  .ticker-input{text-transform:uppercase;letter-spacing:.15em;font-size:20px!important;}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+  .hint{font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono);}
+
+  .preview{background:var(--bg);border:1px solid var(--border);padding:1rem 1.25rem;margin-bottom:1.75rem;font-family:var(--mono);font-size:12px;color:#7aff7a;line-height:1.8;word-break:break-all;position:relative;}
+  .preview::before{content:'TX DATA';position:absolute;top:8px;right:12px;font-size:9px;color:var(--muted);letter-spacing:.1em;}
+
+  .fee-table{width:100%;border-collapse:collapse;margin-bottom:1.75rem;}
+  .fee-table td{padding:8px 0;font-size:13px;border-bottom:1px solid var(--border);}
+  .fee-table tr:last-child td{border-bottom:none;font-weight:500;}
+  .fee-table td:last-child{text-align:right;font-family:var(--mono);color:var(--muted);}
+  .fee-table tr:last-child td:last-child{color:var(--accent);}
+  .strike{text-decoration:line-through;color:var(--muted2);margin-right:8px;font-size:11px;}
+  .free-tag{background:rgba(179,255,0,.1);color:var(--accent);font-size:10px;font-family:var(--mono);padding:2px 7px;}
+
+  .deploy-btn{width:100%;background:var(--accent);color:#000;border:none;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:16px;cursor:pointer;transition:all .2s;}
+  .deploy-btn:hover:not(:disabled){background:#c8ff1a;transform:translateY(-1px);}
+  .deploy-btn:disabled{background:var(--muted2);color:var(--muted);cursor:not-allowed;transform:none;}
+
+  .status-box{padding:1rem 1.25rem;font-family:var(--mono);font-size:12px;line-height:1.8;margin-bottom:1rem;display:none;border:1px solid;white-space:pre-wrap;word-break:break-all;}
+  .status-box.show{display:block;}
+  .status-box.error{background:rgba(255,60,60,.05);border-color:rgba(255,60,60,.3);color:#ff6b6b;}
+  .status-box.success{background:rgba(179,255,0,.05);border-color:rgba(179,255,0,.3);color:var(--accent);}
+  .status-box.info{background:rgba(100,150,255,.05);border-color:rgba(100,150,255,.2);color:#8aaeff;}
+
+  .steps{display:grid;gap:1px;background:var(--border);border:1px solid var(--border);}
+  .step{background:var(--surface);padding:1.25rem 1.5rem;display:flex;gap:1rem;align-items:flex-start;}
+  .step-num{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(179,255,0,.08);border:1px solid rgba(179,255,0,.2);width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .step-text h4{font-size:13px;font-weight:500;margin-bottom:3px;}
+  .step-text p{font-size:12px;color:var(--muted);line-height:1.6;}
+  .step-text a{color:var(--accent);}
+
+  /* Modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:100;display:none;align-items:center;justify-content:center;}
+  .modal-bg.open{display:flex;}
+  .modal{background:var(--surface);border:1px solid var(--border2);padding:2rem;width:90%;max-width:420px;}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;}
+  .modal-header h3{font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);}
+  .modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;}
+  .modal-close:hover{color:var(--text);}
+  .w-opt{display:flex;align-items:center;gap:1rem;padding:1rem;border:1px solid var(--border);margin-bottom:.75rem;cursor:pointer;transition:all .2s;background:var(--bg);}
+  .w-opt:hover{border-color:var(--accent);background:rgba(179,255,0,.03);}
+  .w-icon{width:38px;height:38px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+  .w-name{font-size:14px;font-weight:500;margin-bottom:2px;}
+  .w-desc{font-size:11px;color:var(--muted);font-family:var(--mono);}
+  .acc-item{padding:10px 14px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;transition:all .2s;background:var(--bg);}
+  .acc-item:hover{border-color:var(--accent);}
+  .acc-name{font-size:13px;font-weight:500;margin-bottom:3px;}
+  .acc-addr{font-size:10px;color:var(--muted);font-family:var(--mono);word-break:break-all;}
+  .back-btn{background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--mono);font-size:11px;padding:6px 14px;cursor:pointer;margin-bottom:1rem;}
+  .back-btn:hover{color:var(--text);border-color:var(--text);}
+  .modal-note{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:1rem;line-height:1.7;padding-top:1rem;border-top:1px solid var(--border);}
+  .modal-note a{color:var(--accent);}
+  .err-msg{font-size:12px;color:#ff6b6b;line-height:1.8;font-family:var(--mono);margin-bottom:1.5rem;white-space:pre-wrap;}
+  .err-msg a{color:var(--accent);}
+
+  footer{margin-top:4rem;padding-top:1.5rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;}
+  footer p{font-size:11px;color:var(--muted);font-family:var(--mono);}
+  @media(max-width:500px){.row{grid-template-columns:1fr}.card{padding:1.25rem}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="logo">TAO<span>·</span>DEPLOY</div>
+    <button class="wallet-btn" id="walletBtn" onclick="openModal()">Connect Wallet</button>
+  </header>
+
+  <!-- API status bar -->
+  <div id="apiBar" class="loading">
+    <span class="bar-dot"></span>
+    <span id="apiBarText">@polkadot/api লোড হচ্ছে...</span>
+  </div>
+
+  <div class="hero">
+    <h1>Deploy your<br><em>TAO-20</em> token</h1>
+    <p>Permanently inscribe your token on Bittensor L1. No middlemen, no platform fees — ever.</p>
+    <div class="fee-badge"><span class="dot"></span>ZERO PLATFORM FEE · NETWORK ONLY</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Token Configuration</div>
+    <div class="field">
+      <label>Ticker Symbol</label>
+      <input class="ticker-input" id="ticker" maxlength="4" placeholder="ABCD" oninput="onTickerInput()"/>
+      <div class="hint">Exactly 4 uppercase letters · first come, first served</div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Max Supply</label>
+        <input type="number" id="maxSupply" placeholder="21000000" min="1" oninput="updatePreview()"/>
+        <div class="hint">Total token cap</div>
+      </div>
+      <div class="field">
+        <label>Limit per Mint</label>
+        <input type="number" id="limitMint" placeholder="1000" min="1" oninput="updatePreview()"/>
+        <div class="hint">Max per transaction</div>
+      </div>
+    </div>
+    <div class="preview" id="preview">{"p":"tao-20","op":"deploy","tick":"????","max":"0","lim":"0"}</div>
+    <table class="fee-table">
+      <tr><td style="color:var(--muted)">Platform Fee</td><td><span class="strike">0.01 TAO</span><span class="free-tag">FREE</span></td></tr>
+      <tr><td style="color:var(--muted)">Network Fee</td><td>~0.0001 TAO</td></tr>
+      <tr><td>Total Cost</td><td>~0.0001 TAO</td></tr>
+    </table>
+    <div id="statusBox" class="status-box"></div>
+    <button class="deploy-btn" id="deployBtn" onclick="deployToken()">Deploy Token on Bittensor →</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">How it works</div>
+    <div class="steps">
+      <div class="step"><div class="step-num">01</div><div class="step-text"><h4>Install Polkadot.js extension</h4><p>Download from <a href="https://polkadot.js.org/extension/" target="_blank">polkadot.js.org/extension</a> — Chrome &amp; Firefox.</p></div></div>
+      <div class="step"><div class="step-num">02</div><div class="step-text"><h4>Host on Netlify</h4><p><a href="https://netlify.com/drop" target="_blank">netlify.com/drop</a> এ এই ফাইলটা drag করো — https:// URL পাবে।</p></div></div>
+      <div class="step"><div class="step-num">03</div><div class="step-text"><h4>Connect wallet &amp; fill details</h4><p>4-letter ticker, max supply এবং per-mint limit দাও।</p></div></div>
+      <div class="step"><div class="step-num">04</div><div class="step-text"><h4>Sign and broadcast</h4><p>JSON inscription on-chain যাবে। শুধু ~0.0001 TAO — কোনো platform cut নেই।</p></div></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Bittensor L1 · TAO-20 Protocol</p>
+    <p style="color:var(--muted2)">Experimental — not financial advice</p>
+  </footer>
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div id="stepChoose">
+      <div class="modal-header">
+        <h3>Connect Wallet</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="w-opt" onclick="tryConnect('polkadot-js')">
+        <div class="w-icon" style="background:#e6007a18">🔴</div>
+        <div><div class="w-name">Polkadot.js</div><div class="w-desc">Official browser extension</div></div>
+      </div>
+      <div class="w-opt" onclick="tryConnect('subwallet-js')">
+        <div class="w-icon" style="background:#4af4b018">🟢</div>
+        <div><div class="w-name">SubWallet</div><div class="w-desc">Multi-chain Substrate wallet</div></div>
+      </div>
+      <div class="w-opt" onclick="tryConnect('talisman')">
+        <div class="w-icon" style="background:#d5ff6118">🟡</div>
+        <div><div class="w-name">Talisman</div><div class="w-desc">Bittensor &amp; Polkadot ecosystem</div></div>
+      </div>
+      <div class="modal-note">
+        ⚠ সাইটটা অবশ্যই <b>https://</b> থেকে open করতে হবে।<br>
+        Local <code>file://</code> থেকে extension কাজ করে না।<br><br>
+        <a href="https://netlify.com/drop" target="_blank">→ Netlify Drop এ deploy করো (ফ্রি)</a><br>
+        <a href="https://polkadot.js.org/extension/" target="_blank">→ Polkadot.js extension ডাউনলোড</a>
+      </div>
+    </div>
+    <div id="stepAccounts" style="display:none">
+      <div class="modal-header">
+        <h3>Select Account</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <button class="back-btn" onclick="showStep('Choose')">← Back</button>
+      <div id="accountList"></div>
+    </div>
+    <div id="stepError" style="display:none">
+      <div class="modal-header">
+        <h3>Connection Failed</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="err-msg" id="errMsg"></div>
+      <button class="back-btn" onclick="showStep('Choose')">← Try Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── State ─────────────────────────────────────────────────────
+  var connectedAddress = null;
+  var connectedName    = null;
+  var injectorRef      = null;
+  var apiReady         = false;
+
+  // ── Check if @polkadot/api bundle loaded ──────────────────────
+  window.addEventListener('load', function() {
+    var bar     = document.getElementById('apiBar');
+    var barText = document.getElementById('apiBarText');
+
+    if (window.polkadotApi && window.polkadotApi.ApiPromise) {
+      bar.className = 'ready';
+      barText.textContent = '✓ @polkadot/api ready — Netlify/Vercel-এ host করার পর পুরো কাজ করবে';
+      apiReady = true;
+    } else {
+      bar.className = 'fail';
+      barText.textContent = '⚠ @polkadot/api load হয়নি — সাইটটা https:// থেকে open করো (Netlify/Vercel)';
+      apiReady = false;
+    }
+  });
+
+  // ── Preview ───────────────────────────────────────────────────
+  function onTickerInput() {
+    var el = document.getElementById('ticker');
+    el.value = el.value.toUpperCase().replace(/[^A-Z]/g,'');
+    updatePreview();
+  }
+  function updatePreview() {
+    var t = document.getElementById('ticker').value || '????';
+    var m = document.getElementById('maxSupply').value || '0';
+    var l = document.getElementById('limitMint').value || '0';
+    document.getElementById('preview').textContent =
+      JSON.stringify({"p":"tao-20","op":"deploy","tick":t,"max":m,"lim":l});
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────
+  function openModal()  { document.getElementById('modalBg').classList.add('open'); showStep('Choose'); }
+  function closeModal() { document.getElementById('modalBg').classList.remove('open'); }
+  document.getElementById('modalBg').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+
+  function showStep(name) {
+    ['Choose','Accounts','Error'].forEach(function(s){
+      document.getElementById('step'+s).style.display = s===name ? 'block' : 'none';
+    });
+  }
+
+  // ── Connect wallet ────────────────────────────────────────────
+  async function tryConnect(extName) {
+    // Check https
+    if (location.protocol === 'file:') {
+      document.getElementById('errMsg').innerHTML =
+        '⚠ তুমি এখন file:// থেকে সাইট open করেছ।\n\n' +
+        'Wallet কাজ করবে না।\n\n' +
+        'করণীয়:\n' +
+        '① এই HTML ফাইলটা save করো\n' +
+        '② netlify.com/drop এ drag করো\n' +
+        '③ দেওয়া https:// লিংক থেকে open করো\n\n' +
+        '<a href="https://netlify.com/drop" target="_blank">→ netlify.com/drop খোলো</a>';
+      showStep('Error');
+      return;
+    }
+
+    if (!window.injectedWeb3 || !window.injectedWeb3[extName]) {
+      document.getElementById('errMsg').innerHTML =
+        '<b>' + extName + '</b> extension পাওয়া যাচ্ছে না।\n\n' +
+        '① Extension install করো:\n' +
+        '<a href="https://polkadot.js.org/extension/" target="_blank">→ polkadot.js.org/extension</a>\n\n' +
+        '② Install করার পর page reload করো\n' +
+        '③ Extension এ এই সাইটের permission দাও';
+      showStep('Error');
+      return;
+    }
+
+    try {
+      var ext      = window.injectedWeb3[extName];
+      var injector = await ext.enable('TAO Deploy');
+      injectorRef  = injector;
+      var accounts = await injector.accounts.get();
+
+      if (!accounts || accounts.length === 0) {
+        document.getElementById('errMsg').innerHTML =
+          extName + ' extension-এ কোনো account নেই।\n\nExtension open করে একটা account তৈরি করো।';
+        showStep('Error');
+        return;
+      }
+
+      var list = document.getElementById('accountList');
+      list.innerHTML = '';
+      accounts.forEach(function(acc) {
+        var div = document.createElement('div');
+        div.className = 'acc-item';
+        div.innerHTML = '<div class="acc-name">'+(acc.name||'Account')+'</div><div class="acc-addr">'+acc.address+'</div>';
+        div.onclick = function(){ selectAccount(acc); };
+        list.appendChild(div);
+      });
+      showStep('Accounts');
+
+    } catch(e) {
+      document.getElementById('errMsg').innerHTML =
+        'Error: ' + e.message + '\n\nExtension popup-এ "Allow" click করা হয়েছে?';
+      showStep('Error');
+    }
+  }
+
+  function selectAccount(acc) {
+    connectedAddress = acc.address;
+    connectedName    = acc.name || acc.address.slice(0,10)+'...';
+    closeModal();
+    var btn = document.getElementById('walletBtn');
+    btn.textContent = '● ' + connectedName;
+    btn.classList.add('connected');
+    showStatus('success', '✓ Wallet connected: ' + connectedName + '\n' + connectedAddress);
+  }
+
+  // ── Deploy ────────────────────────────────────────────────────
+  async function deployToken() {
+    var ticker = document.getElementById('ticker').value.toUpperCase();
+    var max    = document.getElementById('maxSupply').value;
+    var lim    = document.getElementById('limitMint').value;
+
+    if (!connectedAddress)           { showStatus('error','⚠ প্রথমে wallet connect করো।'); return; }
+    if (!/^[A-Z]{4}$/.test(ticker))  { showStatus('error','⚠ Ticker অবশ্যই ঠিক 4টা uppercase letter।'); return; }
+    if (!max || parseInt(max)<1)     { showStatus('error','⚠ Max supply দাও।'); return; }
+    if (!lim || parseInt(lim)<1)     { showStatus('error','⚠ Limit per mint দাও।'); return; }
+    if (parseInt(lim)>parseInt(max)) { showStatus('error','⚠ Limit per mint, max supply-এর বেশি হতে পারবে না।'); return; }
+
+    if (!window.polkadotApi || !window.polkadotApi.ApiPromise) {
+      showStatus('error',
+        '⚠ @polkadot/api bundle load হয়নি।\n\n' +
+        'কারণ: সাইটটা local file:// থেকে চলছে।\n\n' +
+        'সমাধান:\n' +
+        '① এই ফাইলটা netlify.com/drop এ drag করো\n' +
+        '② সেই https:// লিংক থেকে open করো\n' +
+        '③ তারপর deploy করো'
+      );
+      return;
+    }
+
+    var inscription = JSON.stringify({"p":"tao-20","op":"deploy","tick":ticker,"max":max,"lim":lim});
+    document.getElementById('deployBtn').disabled = true;
+    showStatus('info', 'Bittensor mainnet এ connect হচ্ছে...\n(wss://entrypoint-finney.opentensor.ai)');
+
+    try {
+      var ApiPromise = window.polkadotApi.ApiPromise;
+      var WsProvider = window.polkadotApi.WsProvider;
+
+      var provider = new WsProvider('wss://entrypoint-finney.opentensor.ai:443');
+      var api = await ApiPromise.create({ provider: provider });
+
+      if (!injectorRef || !injectorRef.signer) throw new Error('Signer পাওয়া যাচ্ছে না। Wallet reconnect করো।');
+
+      showStatus('info', 'Transaction তৈরি হচ্ছে...\nWallet popup-এ Approve করো।\n\nInscription:\n' + inscription);
+
+      var tx   = api.tx.system.remarkWithEvent(inscription);
+      var unsub = await tx.signAndSend(connectedAddress, { signer: injectorRef.signer }, function(result) {
+        if (result.dispatchError) {
+          var msg = 'Transaction failed.';
+          try {
+            if (result.dispatchError.isModule) {
+              var d = api.registry.findMetaError(result.dispatchError.asModule);
+              msg = d.section+'.'+d.name+': '+d.docs.join(' ');
+            }
+          } catch(e2){}
+          showStatus('error','✗ '+msg);
+          document.getElementById('deployBtn').disabled = false;
+          unsub(); return;
+        }
+        if (result.status.isInBlock) {
+          showStatus('success',
+            '✓ Token "'+ticker+'" deployed!\n\n'+
+            'Block: '+result.status.asInBlock.toString()+'\n'+
+            'TX:    '+result.txHash.toString()+'\n\n'+
+            'Inscription:\n'+inscription
+          );
+          document.getElementById('deployBtn').disabled = false;
+          unsub();
+          provider.disconnect();
+        }
+      });
+
+    } catch(e) {
+      showStatus('error','Error: '+e.message);
+      document.getElementById('deployBtn').disabled = false;
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+  function showStatus(type, msg) {
+    var box = document.getElementById('statusBox');
+    box.className = 'status-box show '+type;
+    box.textContent = msg;
+    box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  updatePreview();
+</script>
+</body>
+</html>
